@@ -1,15 +1,15 @@
 "use client"
 
-import { useRef, useState } from "react"
-import { QUESTIONS, getRecommendations, type Answers, type Concept } from "@/lib/navigator-data"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { QUESTIONS, type Answers } from "@/lib/navigator-data"
+import { ASSESSMENT_STORAGE_KEY } from "@/lib/navigator-storage"
 import { QuestionCard } from "@/components/question-card"
-import { RecommendationResults } from "@/components/recommendation-results"
 import { Button } from "@/components/ui/button"
 
 export function Navigator() {
+  const router = useRouter()
   const [answers, setAnswers] = useState<Answers>({})
-  const [recommendations, setRecommendations] = useState<Concept[] | null>(null)
-  const resultsRef = useRef<HTMLElement>(null)
 
   const answeredCount = QUESTIONS.filter((q) => answers[q.id] !== undefined).length
   const allAnswered = answeredCount === QUESTIONS.length
@@ -21,53 +21,38 @@ export function Navigator() {
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     if (!allAnswered) return
-    const result = getRecommendations(answers)
-    setRecommendations(result)
-    // Move focus to the results after they render so trainees see them immediately.
-    requestAnimationFrame(() => {
-      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-      resultsRef.current?.focus()
-    })
-  }
-
-  function handleStartOver() {
-    setAnswers({})
-    setRecommendations(null)
-    requestAnimationFrame(() => {
-      window.scrollTo({ top: 0, behavior: "smooth" })
-    })
+    // Store only the temporary assessment answers for this browser session,
+    // then navigate to the dedicated results page so it can be measured.
+    try {
+      sessionStorage.setItem(ASSESSMENT_STORAGE_KEY, JSON.stringify(answers))
+    } catch {
+      // If storage is unavailable, still navigate; the results page will guard.
+    }
+    router.push("/results")
   }
 
   return (
-    <>
-      <form onSubmit={handleSubmit} className="grid gap-4">
-        {QUESTIONS.map((question, index) => (
-          <QuestionCard
-            key={question.id}
-            question={question}
-            index={index}
-            selectedIndex={answers[question.id]}
-            onSelect={(optionIndex) => handleSelect(question.id, optionIndex)}
-          />
-        ))}
+    <form onSubmit={handleSubmit} className="grid gap-4">
+      {QUESTIONS.map((question, index) => (
+        <QuestionCard
+          key={question.id}
+          question={question}
+          index={index}
+          selectedIndex={answers[question.id]}
+          onSelect={(optionIndex) => handleSelect(question.id, optionIndex)}
+        />
+      ))}
 
-        <div className="sticky bottom-4 z-10 mt-2 rounded-xl border border-border bg-card/95 p-4 backdrop-blur">
-          <Button type="submit" disabled={!allAnswered} className="h-12 w-full text-base font-semibold">
-            Get My 3 Learning Recommendations
-          </Button>
-          <p className="mt-2 text-center text-xs text-muted-foreground" aria-live="polite">
-            {allAnswered
-              ? "All five questions answered — you're ready."
-              : `Answer all five questions to continue (${answeredCount}/${QUESTIONS.length} done).`}
-          </p>
-        </div>
-      </form>
-
-      {recommendations ? (
-        <div className="mt-10 border-t border-border pt-8">
-          <RecommendationResults ref={resultsRef} recommendations={recommendations} onStartOver={handleStartOver} />
-        </div>
-      ) : null}
-    </>
+      <div className="sticky bottom-4 z-10 mt-2 rounded-xl border border-border bg-card/95 p-4 backdrop-blur">
+        <Button type="submit" disabled={!allAnswered} className="h-12 w-full text-base font-semibold">
+          Get My 3 Learning Recommendations
+        </Button>
+        <p className="mt-2 text-center text-xs text-muted-foreground" aria-live="polite">
+          {allAnswered
+            ? "All five questions answered — you're ready."
+            : `Answer all five questions to continue (${answeredCount}/${QUESTIONS.length} done).`}
+        </p>
+      </div>
+    </form>
   )
 }
